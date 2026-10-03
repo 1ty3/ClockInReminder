@@ -1,5 +1,6 @@
 package com.example.clockinreminder.data
 
+import androidx.lifecycle.LiveData
 import androidx.room.*
 
 @Dao
@@ -15,4 +16,23 @@ interface CheckInDao {
     // 该任务累计打卡次数
     @Query("SELECT COUNT(*) FROM check_in_records WHERE taskId = :taskId")
     suspend fun getCountForTask(taskId: Long): Int
+
+    // ================= 联动点① 打卡状态回流主页 =================
+    // 某一天「已打卡」的任务 id 集合。返回 LiveData，主页观察它 → 打卡后列表自动刷新。
+    @Query("SELECT taskId FROM check_in_records WHERE date = :date")
+    fun getTaskIdsOn(date: String): LiveData<List<Long>>
+
+    // ================= 联动点② 已打卡免打扰 =================
+    // 某任务某天是否已打卡（返回 0 = 没打过）
+    @Query("SELECT COUNT(*) FROM check_in_records WHERE taskId = :taskId AND date = :date")
+    suspend fun countOn(taskId: Long, date: String): Int
+
+    // 撤销某任务某天的打卡（主页「撤销」按钮用）
+    @Query("DELETE FROM check_in_records WHERE taskId = :taskId AND date = :date")
+    suspend fun deleteOn(taskId: Long, date: String): Int
+
+    // ================= 联动点⑥ 删除任务的联动清理 =================
+    // 删除任务时连带清掉它的全部打卡记录，不留孤儿数据
+    @Query("DELETE FROM check_in_records WHERE taskId = :taskId")
+    suspend fun deleteForTask(taskId: Long): Int
 }

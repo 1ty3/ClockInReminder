@@ -27,6 +27,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewModel: TaskViewModel
     private lateinit var adapter: TaskAdapter
 
+    /** 当前任务列表（渲染今日进度用） */
+    private var currentTasks: List<Task> = emptyList()
+
+    /** 今天已打卡的任务 id（联动点①） */
+    private var doneIds: Set<Long> = emptySet()
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -41,6 +47,7 @@ class MainActivity : AppCompatActivity() {
         viewModel = ViewModelProvider(this)[TaskViewModel::class.java]
         adapter = TaskAdapter(
             onDone = { markDone(it) },
+            onUndo = { undoDone(it) },
             onToggle = { toggleTask(it) },
             onDelete = { deleteTask(it) }
         )
@@ -49,8 +56,17 @@ class MainActivity : AppCompatActivity() {
 
         // 任务列表变化 → 刷新 UI 并（重新）排好闹钟
         viewModel.tasks.observe(this) { tasks ->
+            currentTasks = tasks
             adapter.submitList(tasks)
             tasks.forEach { AlarmScheduler.schedule(this, it) }
+            renderTodayProgress()
+        }
+
+        // 联动点①：今日打卡状态变化 → 卡片状态与进度条自动刷新
+        viewModel.todayDoneTaskIds.observe(this) { ids ->
+            doneIds = ids.toSet()
+            adapter.submitDoneIds(doneIds)
+            renderTodayProgress()
         }
 
         binding.fabAdd.setOnClickListener {
@@ -72,6 +88,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // 联动点⑤（跨天自愈）：App 一直开着过了零点，回来时把"今日"指向新的一天
+        viewModel.rolloverIfDateChanged()
     }
 
     private fun markDone(task: Task) {
@@ -82,19 +100,57 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** 撤销今日打卡（点错了有救） */
+    private fun undoDone(task: Task) {
+        lifecycleScope.launch {
+            viewModel.undoDone(task.id)
+            Toast.makeText(this@MainActivity, "已撤销「${task.name}」今日打卡", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun toggleTask(task: Task) {
         lifecycleScope.launch {
             viewModel.updateTask(task)
-            AlarmScheduler.schedule(this@MainActivity, task)
+            if (task.enabled) {
+                AlarmScheduler.schedule(this@MainActivity, task)
+            } else {
+                // 联动点⑥：禁用任务的联动清理 ——
+                // 闹钟必须撤掉；已经挂在通知栏的那条常驻提醒也要收掉，
+                // 否则它 setOngoing(true) 清不掉，会一直赖在通知栏里。
+                AlarmScheduler.cancel(this@MainActivity, task.id)
+                NotificationHelper.cancelReminder(this@MainActivity, task.id)
+            }
         }
     }
 
     private fun deleteTask(task: Task) {
         lifecycleScope.launch {
+            // 联动点⑥：删除任务的联动清理 —— 闹钟 + 通知 + 打卡记录，一条不留
             AlarmScheduler.cancel(this@MainActivity, task.id)
             NotificationHelper.cancelReminder(this@MainActivity, task.id)
-            viewModel.deleteTask(task)
+            viewModel.deleteTask(task)   // 内部连带删除该任务的打卡记录
+            Toast.makeText(this@MainActivity, "已删除「${task.name}」及其打卡记录", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /**
+     * 联动点①：今日进度 = 「启用中」任务的打卡完成度。
+     * 已禁用的任务不算进分母 —— 它今天本来就不该打卡。
+     */
+    private fun renderTodayProgress() {
+        val enabledTasks = currentTasks.filter { it.enabled }
+        val doneCount = enabledTasks.count { it.id in doneIds }
+
+        binding.tvTodayProgress.text = if (enabledTasks.isEmpty()) {
+            "今日进度：暂无可打卡任务"
+        } else if (doneCount == enabledTasks.size) {
+            "今日进度：$doneCount / ${enabledTasks.size} —— 今天全部完成 🎉"
+        } else {
+            "今日进度：$doneCount / ${enabledTasks.size}"
+        }
+
+        binding.progressToday.max = enabledTasks.size.coerceAtLeast(1)
+        binding.progressToday.progress = doneCount
     }
 
     /** Android 13+ 运行时申请通知权限 */
