@@ -76,6 +76,9 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
 
+        // 联动点⑧：批量一键打卡
+        binding.btnCheckAll.setOnClickListener { checkAll() }
+
         // 立即测试提醒：点一下马上弹通知+震动，用来验证 App 本身通不通
         binding.btnTest.setOnClickListener {
             NotificationHelper.showReminder(this, 0L, "测试提醒", true)
@@ -105,6 +108,26 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.undoDone(task.id)
             Toast.makeText(this@MainActivity, "已撤销「${task.name}」今日打卡", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * 联动点⑧：一键打卡 —— 把所有「启用中且今天还没打卡」的任务一次性打上。
+     *
+     * 只捡没打过的那几个，已经打过的不会被重复写（DAO 层还有唯一索引兜底），
+     * 所以这个按钮随时按都安全，不会产生重复记录、也不会把撤销过的又打回去。
+     */
+    private fun checkAll() {
+        lifecycleScope.launch {
+            val targets = currentTasks.filter { it.enabled && it.id !in doneIds }
+            if (targets.isEmpty()) {
+                Toast.makeText(this@MainActivity, "今天该打卡的任务都完成了 🎉", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            viewModel.markAllDone(targets.map { it.id })
+            // 挨个把通知栏里还挂着的提醒收掉 —— 已经打过卡了，没理由再留着
+            targets.forEach { NotificationHelper.cancelReminder(this@MainActivity, it.id) }
+            Toast.makeText(this@MainActivity, "已一键打卡 ${targets.size} 个任务 ✅", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -151,6 +174,12 @@ class MainActivity : AppCompatActivity() {
 
         binding.progressToday.max = enabledTasks.size.coerceAtLeast(1)
         binding.progressToday.progress = doneCount
+
+        // 联动点⑧：把“还剩几个”直接写在按钮上；都打完了就没必要再点
+        val remaining = enabledTasks.size - doneCount
+        binding.btnCheckAll.text = if (remaining > 0) "一键打卡（还剩 $remaining 个）" else "今天已全部完成"
+        binding.btnCheckAll.isEnabled = remaining > 0
+        binding.btnCheckAll.alpha = if (remaining > 0) 1f else 0.5f
     }
 
     /** Android 13+ 运行时申请通知权限 */

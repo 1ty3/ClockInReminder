@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import com.example.clockinreminder.MainActivity
 import com.example.clockinreminder.R
 import com.example.clockinreminder.receiver.MarkDoneReceiver
+import com.example.clockinreminder.receiver.SnoozeReceiver
 
 /**
  * 通知 + 震动模块。
@@ -26,6 +27,9 @@ import com.example.clockinreminder.receiver.MarkDoneReceiver
 object NotificationHelper {
     const val CHANNEL_ID = "clockin_reminder_channel"
     private val VIBRATION_PATTERN = longArrayOf(0, 600, 300, 600) // 震-停-震
+
+    /** 联动点④：点「稍后提醒」后延后多少分钟再响 */
+    const val SNOOZE_MINUTES = 10
 
     fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -58,8 +62,20 @@ object NotificationHelper {
      * 关键设计：
      * - setOngoing(true) 让用户无法通过侧滑或通知中心的“全部清除”删掉该通知；
      * - 它只能等用户在 App 内打卡（或通知栏点“标记完成”）后，由应用主动 cancel 才会消失。
+     *
+     * @param streak      联动点③：连续打卡天数。0 = 没有连续记录，文案就不提天数。
+     * @param allowSnooze 联动点④：是否显示「稍后提醒」按钮。
+     *                    只有正常到点的提醒才给；由 snooze 补发的那一次不给 ——
+     *                    “只补一次”就是这么实现的，不需要额外存状态。
      */
-    fun showReminder(context: Context, taskId: Long, taskName: String, vibrate: Boolean) {
+    fun showReminder(
+        context: Context,
+        taskId: Long,
+        taskName: String,
+        vibrate: Boolean,
+        streak: Int = 0,
+        allowSnooze: Boolean = false
+    ) {
         createChannel(context)
 
         // 点击通知主体 → 打开 App 主页
@@ -89,10 +105,19 @@ object NotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // 联动点③：把连续天数写进文案。到点提醒时今天通常还没打卡，
+        // 所以这里的 streak 是“昨天及之前连续了多少天”。
+        val title = if (streak >= 2) "⏰ 打卡提醒 · 已连续 $streak 天" else "⏰ 打卡提醒"
+        val text = when {
+            streak >= 2 -> "该「$taskName」啦，别让 $streak 天的连续记录断了！"
+            streak == 1 -> "该「$taskName」啦，昨天打了卡，继续保持！"
+            else -> "该「$taskName」啦，点击去打卡！"
+        }
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("⏰ 打卡提醒")
-            .setContentText("该「$taskName」啦，点击去打卡！")
+            .setContentTitle(title)
+            .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(contentPendingIntent)
@@ -100,6 +125,20 @@ object NotificationHelper {
             .setOngoing(true)          // 常驻通知：清不掉、划不掉、全部清除无效
             .setAutoCancel(false)      // 点击通知主体也不自动消失，必须打完卡才消失
             .addAction(R.drawable.ic_notification, "标记完成", donePendingIntent)
+
+        // 联动点④：断签补救 —— 来不及打卡时把提醒往后推，最多推一次
+        if (allowSnooze) {
+            val snoozeIntent = Intent(context, SnoozeReceiver::class.java).apply {
+                putExtra("taskId", taskId)
+                putExtra("taskName", taskName)
+                putExtra("vibrate", vibrate)
+            }
+            val snoozePendingIntent = PendingIntent.getBroadcast(
+                context, (taskId + 300000).toInt(), snoozeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(R.drawable.ic_notification, "稍后 $SNOOZE_MINUTES 分钟", snoozePendingIntent)
+        }
 
         if (vibrate) builder.setVibrate(VIBRATION_PATTERN)
 

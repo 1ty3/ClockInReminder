@@ -28,6 +28,9 @@ class TaskRepository(private val db: AppDatabase) {
     suspend fun getTaskById(id: Long): Task? = db.taskDao().getById(id)
 
     suspend fun insertRecord(record: CheckInRecord) = db.checkInDao().insert(record)
+
+    /** 联动点⑧：批量写入打卡记录（一键打卡用，一次事务搞定） */
+    suspend fun insertRecords(records: List<CheckInRecord>) = db.checkInDao().insertAll(records)
     suspend fun getDatesForTask(taskId: Long): List<String> = db.checkInDao().getDatesForTask(taskId)
     suspend fun getCountForTask(taskId: Long): Int = db.checkInDao().getCountForTask(taskId)
 

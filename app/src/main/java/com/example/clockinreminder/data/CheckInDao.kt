@@ -35,4 +35,9 @@ interface CheckInDao {
     // 删除任务时连带清掉它的全部打卡记录，不留孤儿数据
     @Query("DELETE FROM check_in_records WHERE taskId = :taskId")
     suspend fun deleteForTask(taskId: Long): Int
+
+    // ================= 联动点⑧ 批量一键打卡 =================
+    // 一次事务写入多条今日打卡记录（重复的靠唯一索引 IGNORE 自动跳过）
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAll(records: List<CheckInRecord>): List<Long>
 }

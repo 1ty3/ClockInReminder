@@ -77,6 +77,16 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         repository.undoRecordOn(taskId, todayKey)
     }
 
+    /**
+     * 联动点⑧：批量一键打卡。
+     * 一次事务写入多条记录 —— 中途不会出现“打了一半”的中间状态。
+     */
+    suspend fun markAllDone(taskIds: List<Long>) {
+        if (taskIds.isEmpty()) return
+        rolloverIfDateChanged()
+        repository.insertRecords(taskIds.map { CheckInRecord(taskId = it, date = todayKey) })
+    }
+
     suspend fun getDatesForTask(taskId: Long): List<String> = repository.getDatesForTask(taskId)
     suspend fun getCountForTask(taskId: Long): Int = repository.getCountForTask(taskId)
 }

@@ -46,6 +46,10 @@
         <receiver
             android:name=".receiver.MarkDoneReceiver"
             android:exported="false" />
+        <!-- 通知栏“稍后提醒”按钮广播（联动点④） -->
+        <receiver
+            android:name=".receiver.SnoozeReceiver"
+            android:exported="false" />
         <!-- 开机 / 应用更新后重新调度所有闹钟（系统广播，需要导出） -->
         <receiver
             android:name=".receiver.BootReceiver"
