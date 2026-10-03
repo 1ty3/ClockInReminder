@@ -1,0 +1,24 @@
+# ---------- 构建产物 ----------
+.gradle/
+build/
+captures/
+
+# ---------- 本地配置（含本机 SDK 路径，不应提交） ----------
+local.properties
+
+# ---------- 签名密钥与密码（绝对不要提交！） ----------
+keystore.properties
+*.keystore
+*.jks
+
+# ---------- 构建日志 ----------
+build_log*.txt
+
+# ---------- IDE ----------
+.idea/
+*.iml
+.vscode/
+
+# ---------- 系统 ----------
+.DS_Store
+Thumbs.db

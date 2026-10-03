@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 铃铛主体（白色，适配通知栏小图标） -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M12,22 a2,2 0 0,0 2,-2 L10,20 a2,2 0 0,0 2,2 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M18,16 L18,9 a6,6 0 0,0 -12,0 L6,16 L4,18 L4,19 L20,19 L20,18 L18,16 Z"/>
+</vector>
